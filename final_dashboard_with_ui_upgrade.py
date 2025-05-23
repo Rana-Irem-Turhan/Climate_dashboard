@@ -36,7 +36,7 @@ seasonal_avg = (
 # ─────────────────────────────────────
 app = Dash(__name__, suppress_callback_exceptions=True)
 app.title = "Climate Dashboard"
-
+server = app.server
 # ─────────────────────────────────────
 # 4. Layout
 # ─────────────────────────────────────
@@ -417,5 +417,6 @@ def update_hemi_graph( selected_inds, theme , hemi):
 # 9. Run Server
 # ─────────────────────────────────────
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run_server(debug=False, host='0.0.0.0', port=8080)
+
 
