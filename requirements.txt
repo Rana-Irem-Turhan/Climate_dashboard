@@ -1,4 +1,7 @@
-dash
-pandas
+dash==3.0.4
 plotly
+pandas
+numpy
 gunicorn
+Werkzeug==2.3.3
+dash-bootstrap-components==1.5.0
