@@ -1,0 +1,2 @@
+title: Climate Dashboard
+This interactive dashboard visualizes the relationship between human-induced CO₂ emissions, temperature land anomalies,temperature land-ocean anomalies, and sea level changes using multi-variable trends in 30 years span time. It was developed as part of a bachelor's thesis at Riga Technical University, aiming to enhance climate education through data storytelling, animation, and exploratory tools.
