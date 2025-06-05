@@ -1,38 +1,39 @@
-# 1. Imports
+# pandas plus plotly
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+# Dash 
 from dash import Dash, dcc, html, Input, Output, State, no_update
 import numpy as np
 import dash_bootstrap_components as dbc
 
 
-# 2. Data Loading & Preprocessing
-df = pd.read_csv("merged_global.csv")
-df["Date"] = pd.to_datetime(df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2) + "-15")
-hemi_df = pd.read_csv("hemispheric_merged.csv")
-hemi_df["Date"] = pd.to_datetime(hemi_df[["year", "month"]].assign(day=15))
-
-def get_season(month):
+# load and prep the data 
+raw_global = pd.read_csv("merged_global.csv")
+raw_global["Date"] = pd.to_datetime(raw_global[["year", "month"]].assign(day=15))
+raw_hemi = pd.read_csv("hemispheric_merged.csv")
+raw_hemi["Date"] = pd.to_datetime(raw_hemi[["year", "month"]].assign(day=15))
+# getting the  seasons according to the month they belong
+def tag_season(month):
     return {12: "DJF", 1: "DJF", 2: "DJF",
             3: "MAM", 4: "MAM", 5: "MAM",
             6: "JJA", 7: "JJA", 8: "JJA",
             9: "SON", 10: "SON", 11: "SON"}[month]
 
-df["Season"] = df["month"].apply(get_season)
+raw_global["Season"] = raw_global["month"].apply(tag_season)
+# Donw a bit of aggregation for seasonal views ( useful for later)
 seasonal_avg = (
-    df.groupby(["year", "Season"])
+    raw_global.groupby(["year", "Season"])
     .mean(numeric_only=True)
     .reset_index()
     .assign(Season_Order=lambda d: d["Season"].map({"DJF": 0, "MAM": 1, "JJA": 2, "SON": 3}))
     .sort_values(["year", "Season_Order"])
 )
-
-# 3. App Initialization
+# intializing the dash app now 
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], suppress_callback_exceptions=True)
 app.title = "Climate Dashboard"
 
-# 4. Layout
+# deciding heading and structure of the top level layout of the dashboard
 app.layout = dbc.Container([
     dbc.Row([
         dbc.Col(html.H1("Climate Dashboard", className="text-center my-3"), width=12)
@@ -42,32 +43,29 @@ app.layout = dbc.Container([
         dbc.Col([
             html.Label("Mode:"),
             dcc.RadioItems(
-                id='theme-toggle',
-                options=["Light", "Dark"],
-                value="Light",
-                labelStyle={'display': 'inline-block', 'margin-right': '10px'}
-            )
+                id='theme-toggle',options=["Light", "Dark"],value="Light",labelStyle={'display': 'inline-block', 'margin-right': '10px'})
         ], width=12, className="text-center mb-3")
     ]),
-
+# Main tabbed content
     dbc.Row([
         dbc.Col([
             dcc.Tabs(id="tabs", value='global', children=[
-                dcc.Tab(label='🌍 Global Trends', value='global'),
-                dcc.Tab(label='🌍 NH vs SH Comparison', value='hemispheres')
+                dcc.selected_tab(label='🌍 Global Trends', value='global'),
+                dcc.selected_tab(label='🌍 NH vs SH Comparison', value='hemispheres')
             ]),
             html.Div(id='tabs-content')
         ], width=12)
     ]),
-
+# for downloading the csv 
     dcc.Download(id="download-csv")
 ], fluid=True, style={"minWidth": "1100px", "height": "100vh", "padding": "10px"})
 
 
-# 5. Tab Switching Callback
+# to switch the tabs here it is logic
 @app.callback(Output('tabs-content', 'children'), Input('tabs', 'value'))
-def render_tab(tab):
-    if tab == 'global':
+def switch_tab(selected_tab):
+    # note: global is the default tab
+    if selected_tab == 'global':
         return dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -82,11 +80,11 @@ def render_tab(tab):
                         ], value=['norm_co2', 'norm_land_ocean_temp'], labelStyle={'display': 'block'}),
 
                         html.Br(),
-                        html.Label("View Mode:"),
+                        html.Label("Data View:"),
                         dcc.RadioItems(id='view-mode', options=["Monthly", "Seasonal"], value="Monthly"),
 
                         html.Br(),
-                        html.Button("⬇ Export CSV", id="export-csv", className="btn btn-primary")
+                        html.Button("⬇ Download CSV", id="export-csv", className="btn btn-primary")
                     ])
                 ])
             ], width=3),
@@ -95,7 +93,7 @@ def render_tab(tab):
                 dbc.Card([
                     dbc.CardHeader("📊 What You’re Seeing"),
                     dbc.CardBody(id="explanation-box", style={
-                        "backgroundColor": "#eef2f3",
+                        "backgroundColor":"#eef2f3",
                         "borderRadius": "6px",
                         "fontSize": "15px"
                     })
@@ -104,9 +102,9 @@ def render_tab(tab):
 
                 dcc.RangeSlider(
                     id='global-slider',
-                    min=df['year'].min(), max=df['year'].max(),
-                    value=[1993, df['year'].max()],
-                    marks={str(y): str(y) for y in range(df['year'].min(), df['year'].max()+1, 5)},
+                    min=raw_global['year'].min(), max=raw_global['year'].max(),
+                    value=[1993, raw_global['year'].max()],
+                    marks={str(y): str(y) for y in range(raw_global['year'].min(), raw_global['year'].max()+1, 5)},
                     step=1
                 ),
 
@@ -122,8 +120,8 @@ def render_tab(tab):
                 )
             ], width=9)
         ])
-
-    elif tab == 'hemispheres':
+# Show hemisphere tab content 
+    elif selected_tab == 'hemispheres':
         return dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -147,7 +145,7 @@ def render_tab(tab):
 
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("🧭 What You’re Seeing – Hemisphere Comparison"),
+                    dbc.CardHeader(" What You’re Seeing – Hemisphere Comparison"),
                     dbc.CardBody([
                         html.P("Use this section to analyze climate indicators separately for the Northern or Southern Hemisphere."),
                         html.P("🌍 First, select a hemisphere using the dropdown above. Then, choose which indicators to animate."),
@@ -166,7 +164,7 @@ def render_tab(tab):
     Output("hemi-checklist", "value"),
     Input("hemi-hemi-dropdown", "value")
 )
-def update_hemi_checklist(hemi):
+def refresh_hemi_checklist(hemi):
     if hemi is None:
         return [], []
     prefix = f"norm_{hemi}_"
@@ -179,8 +177,7 @@ def update_hemi_checklist(hemi):
     options = [{"label": label, "value": key} for key, label in options_map.items()]
     default_values = [opt["value"] for opt in options]
     return options, default_values
-
-# 6. Global Graph and Summary
+# Updates global graph explanation box and summary panel in real time
 @app.callback(
     Output('global-graph', 'figure'),
     Output('explanation-box', 'children'),
@@ -191,7 +188,7 @@ def update_hemi_checklist(hemi):
     Input('theme-toggle', 'value')
 )
 def update_global(selected, year_range, mode, theme):
-    # Raw value mapping for hover tooltips
+    # Raw value mapping for users to see when they hover tooltips
     raw_mapping = {
         'norm_co2': 'co2_anomaly',
         'norm_land_ocean_temp': 'land_ocean_anomaly',
@@ -199,15 +196,15 @@ def update_global(selected, year_range, mode, theme):
         'norm_sea_level': 'msl_mm'
     }
 
-    # Get correct time window
-    dff = df[(df["year"] >= year_range[0]) & (df["year"] <= year_range[1])]
+    # to get the correct time window i use filtering 
+    dff = raw_global[(raw_global["year"] >= year_range[0]) & (raw_global["year"] <= year_range[1])]
     dff_season = seasonal_avg[(seasonal_avg["year"] >= year_range[0]) & (seasonal_avg["year"] <= year_range[1])]
     use_df = dff.copy() if mode == "Monthly" else dff_season.copy()
 
-    # Time axis
+    # time axis for either the month view mode selected or the seasonal one
     use_df["X"] = use_df["Date"] if mode == "Monthly" else use_df["Season"] + " " + use_df["year"].astype(str)
 
-    # Prepare hover tooltips with raw values
+    # setting up hover tooltips with raw values
     hover_data = {}
     for col in selected:
         if col in raw_mapping and raw_mapping[col] in use_df.columns:
@@ -216,7 +213,7 @@ def update_global(selected, year_range, mode, theme):
     # Final filtered DataFrame for plotting
     plot_df = use_df[["X", "year"] + selected + [raw_mapping[c] for c in selected if c in raw_mapping]].dropna()
 
-    # Create figure
+    # Create the figure
     fig = px.line(
         plot_df,
         x="X",
@@ -227,12 +224,12 @@ def update_global(selected, year_range, mode, theme):
         hover_data=hover_data
     )
     
-    df['Season_Order'] = df['Season'].map({'DJF': 0, 'MAM': 1, 'JJA': 2, 'SON': 3})
-    df['X'] = df['Season'] + ' ' + df['year'].astype(str)
+    raw_global['Season_Order'] = raw_global['Season'].map({'DJF': 0, 'MAM': 1, 'JJA': 2, 'SON': 3})
+    raw_global['X'] = raw_global['Season'] + ' ' + raw_global['year'].astype(str)
 
     
 
-    # Annotate global climate events correctly in both Monthly and Seasonal modes
+    # Annotating global climate events in both Monthly and Seasonal modes
     policy_events = {
         1997: {"label": "Kyoto Protocol", "month": 12},
         2015: {"label": "Paris Agreement", "month": 12},
@@ -242,7 +239,7 @@ def update_global(selected, year_range, mode, theme):
     for year, event in policy_events.items():
         label = event["label"]
         month = event["month"]
-        season = get_season(month)
+        season = tag_season(month)
         season_label = f"{season} {year}"
         
         if mode == "Monthly":
@@ -273,10 +270,7 @@ def update_global(selected, year_range, mode, theme):
                     ay=-30,
                     font=dict(size=10)
                 )
-    
-
-    # Explanation Box
-    
+    # Explanation box to make it simpler to undertsand the data for users
     explanation = html.Div([
 
         html.P("🌍 This dashboard compares key climate indicators that reflect human impact on the Earth’s climate system."),
@@ -310,10 +304,7 @@ def update_global(selected, year_range, mode, theme):
         ]),
         html.P("➤ You can use the legend side of the chart to show or hide each indicator.")
     ])
- 
-
-
-    # Correlation Text (normalized Pearson r)
+  # short correlation summary between the indciators  (normalized Pearson r)
     corr_texts = []
     norm_corr_df = plot_df[["X"] + selected].copy()
     for col in selected:
@@ -332,7 +323,7 @@ def update_global(selected, year_range, mode, theme):
 
     return fig, explanation, html.Ul([html.Li(text) for text in corr_texts])
 
-# 7. Export CSV
+# to download the csv file to see the preprocessed dataset
 @app.callback(
     Output("download-csv", "data"),
     Input("export-csv", "n_clicks"),
@@ -340,11 +331,19 @@ def update_global(selected, year_range, mode, theme):
     prevent_initial_call=True,
 )
 def export_csv(n_clicks, year_range):
-    if n_clicks:
-        filtered = df[(df['year'] >= year_range[0]) & (df['year'] <= year_range[1])]
-        return dcc.send_data_frame(filtered.to_csv, "filtered_climate_data.csv")
-    return no_update
-# 8. Hemisphere Animation Callback
+    if not n_clicks:
+        return no_update  # No button click, no download
+
+    #filter the global data by year range
+    try:
+        export_df = raw_global[(raw_global['year'] >= year_range[0]) & (raw_global['year'] <= year_range[1])]
+        return dcc.send_data_frame(export_df.to_csv, filename="filtered_climate_data.csv")
+    except Exception as e:
+        # incase failing to export the csv
+        print(f"Export failed: {e}")
+        return no_update
+
+#  hemisphere animated graph callback to animaate over time 
 @app.callback(
     Output('hemi-animation', 'figure'),
     Input('hemi-checklist', 'value'),
@@ -358,10 +357,10 @@ def update_hemi_graph( selected_inds, theme , hemi):
             template="plotly_dark" if theme == "Dark" else "plotly_white"
         )
 
-    hemi_df = pd.read_csv("hemispheric_merged.csv")
+    raw_hemi = pd.read_csv("hemispheric_merged.csv")
     #take mean of monthly data
-    hemi_df_grouped = hemi_df.groupby([ "year"]).mean(numeric_only=True).reset_index()
-       # Define variable name mapping for legend & tooltip
+    hemi_df_grouped = raw_hemi.groupby([ "year"]).mean(numeric_only=True).reset_index()
+       # Defining variable name for legend and tooltip
     label_map = {
         "norm_north_co2": "CO₂ Anomaly (NH)",
         "norm_north_land": "Land Temp (NH)",
@@ -379,7 +378,7 @@ def update_hemi_graph( selected_inds, theme , hemi):
     }
 
     fig = go.Figure()
-    # Step 1: Add initial visible traces from the first year
+    #  Add lines for firdy years data for initial display  
     initial_year = hemi_df_grouped["year"].min()
     for ind in selected_inds:
         subset = hemi_df_grouped[hemi_df_grouped["year"] <= initial_year]
@@ -392,7 +391,7 @@ def update_hemi_graph( selected_inds, theme , hemi):
             hovertemplate="%{y:.2f} (normalized)<br>Year: %{x}"
         ))        
       
-    # Step 2: Create animation frames   
+    #  Create animation frames progressively for each year   
     frames = []
     for year in hemi_df_grouped["year"]:
         data = []
@@ -408,7 +407,7 @@ def update_hemi_graph( selected_inds, theme , hemi):
         frames.append(go.Frame(data=data, name=str(year)))
 
     fig.frames = frames
-
+# Layout of the play pause button andd slider 
     fig.update_layout(
         title=f"{hemi.upper()} Hemisphere – Normalized Indicators Over Time",
         xaxis_title="Year",
@@ -436,9 +435,8 @@ def update_hemi_graph( selected_inds, theme , hemi):
         }]
     )
     return fig
-
-# 9. Run Server
-server = app.server  # Required for gunicorn
+# to be deployed adding the server port accordingly docker 
+server = app.server  
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=7860)
